@@ -63,11 +63,38 @@ func runInit(cmd *cobra.Command, args []string) error {
 		typ = serverpb.InitType_VIRTUALIZED_EMPTY
 	}
 
+	traceSession := newAppTraceSession("init")
+	secure := !serverCfg.Insecure
+	traceSession.Emit("NodeInitCommand", map[string]any{
+		"secure": secure,
+		"before": map[string]any{},
+		"after": map[string]any{
+			"secure": secure,
+		},
+		"nondeterministic": map[string]any{
+			"k8s": []string{"podName"},
+		},
+	})
+
 	// Actually perform cluster initialization.
 	c := conn.NewInitClient()
-	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{
+	_, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{
 		InitType: typ,
-	}); err != nil {
+	})
+	initResult := classifyNodeInitResult(err)
+	traceSession.Emit("NodeInitCommandReturn", map[string]any{
+		"error": initResult,
+		"before": map[string]any{
+			"error": "PENDING",
+		},
+		"after": map[string]any{
+			"error": initResult,
+		},
+		"nondeterministic": map[string]any{
+			"client": []string{"error"},
+		},
+	})
+	if err != nil {
 		return err
 	}
 
