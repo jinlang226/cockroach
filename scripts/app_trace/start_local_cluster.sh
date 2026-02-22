@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COCKROACH_BIN="${COCKROACH_BIN:-cockroach}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+DEFAULT_COCKROACH_BIN="${REPO_ROOT}/cockroach"
+COCKROACH_BIN="${COCKROACH_BIN:-${DEFAULT_COCKROACH_BIN}}"
+
+if [[ ! -x "${COCKROACH_BIN}" ]]; then
+  echo "Cockroach binary not found (or not executable): ${COCKROACH_BIN}"
+  echo "Build your local source binary first:"
+  echo "  cd ${REPO_ROOT}"
+  echo "  ./dev build short"
+  echo "Then rerun this script, or set COCKROACH_BIN explicitly."
+  exit 1
+fi
+
 CLUSTER_DIR="${APP_TRACE_CLUSTER_DIR:-$(pwd)/_app_trace_cluster}"
 NODE_COUNT="${APP_TRACE_NODE_COUNT:-5}"
 BASE_SQL_PORT="${APP_TRACE_BASE_SQL_PORT:-26257}"
@@ -41,7 +54,6 @@ for ((i=0; i<NODE_COUNT; i++)); do
     --join="${join_addrs}" \
     --background \
     --pid-file="${node_dir}/cockroach.pid"
-
 done
 
 sleep 3

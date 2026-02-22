@@ -2,47 +2,61 @@
 
 This README explains how to, on Ubuntu:
 
-1. install CockroachDB CLI/binary,
+1. build Cockroach from **your local source branch**,
 2. start a local multi-node Cockroach cluster,
 3. run application trace test cases (auto-generate JSON traces),
 4. run application conformance against the P model in `autokctrl/cockroach`.
 
 ---
 
-## 0) Are these logs sufficient for model trace validation?
+## 0) Scope and sufficiency
 
-Yes, for the current Cockroach application model in `autokctrl/cockroach`.
-
-Current app-model events required:
+For the current Cockroach application model in `autokctrl/cockroach`, the required app events are:
 
 - `NodeInitCommand` / `NodeInitCommandReturn`
 - `DecommissionCommand` / `DecommissionCommandReturn`
 
-These events are now logged in this repo at:
+These events are logged from this repo's CLI path:
 
 - `pkg/cli/init.go` (init path)
 - `pkg/cli/node.go` (decommission path)
 - `pkg/cli/app_trace_logger.go` (JSON trace writer)
 
-If the model adds new app events/fields later, logging must be extended accordingly.
+If the model adds new app events or fields, extend logging accordingly.
 
 ---
 
-## 1) Install CockroachDB on Ubuntu (binary)
+## 1) Build Cockroach from your local source (required)
 
-Example for `v25.4.3`:
+Use your modified local source. Do **not** use the public prebuilt Cockroach binary for trace-conformance work, because your trace logging lives in your local code changes.
+
+### 1.1 Install common build dependencies
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl tar
-
-cd /tmp
-curl -LO https://binaries.cockroachdb.com/cockroach-v25.4.3.linux-amd64.tgz
-tar -xzf cockroach-v25.4.3.linux-amd64.tgz
-sudo cp -i cockroach-v25.4.3.linux-amd64/cockroach /usr/local/bin/
-
-cockroach version
+sudo apt-get install -y \
+  build-essential git curl python3 zip unzip \
+  clang lld openjdk-21-jre-headless
 ```
+
+### 1.2 Build from this repo
+
+From repo root:
+
+```bash
+cd /path/to/cockroach
+
+# Optional but recommended: checks local toolchain prerequisites.
+./dev doctor || true
+
+# Build local binary from your source branch.
+./dev build short
+
+# Verify local binary exists.
+./cockroach version
+```
+
+The scripts in `scripts/app_trace/` default to this local binary: `./cockroach`.
 
 ---
 
@@ -156,7 +170,7 @@ From `autokctrl/cockroach` (use absolute trace path):
 
 ## 7) Common environment variables
 
-- `COCKROACH_BIN`: Cockroach executable path (default: `cockroach`)
+- `COCKROACH_BIN`: Cockroach executable path (default: repo-local `./cockroach`)
 - `COCKROACH_HOST`: CLI target host (default: `127.0.0.1:26257`)
 - `COCKROACH_INSECURE`: default `true`
 - `TRACE_DIR`: output directory for traces (default: `$(pwd)/traces`)
@@ -173,17 +187,17 @@ Local cluster script vars:
 
 ## 8) Troubleshooting
 
-1. `cockroach: command not found`
-   - check `cockroach version`
-   - make sure `/usr/local/bin` is in PATH
+1. `Cockroach binary not found ...`
+   - run from repo root: `./dev build short`
+   - verify: `./cockroach version`
 
 2. Port conflict
    - stop existing Cockroach processes, or change `APP_TRACE_BASE_SQL_PORT`
 
 3. Trace file not generated
-   - check script stderr/stdout for command failure
+   - check script output for command failure
    - check write permission for current `traces/`
 
 4. Decommission case fails
    - verify 5-node cluster is up first
-   - run: `cockroach node status --insecure --host=127.0.0.1:26257`
+   - run: `./cockroach node status --insecure --host=127.0.0.1:26257`

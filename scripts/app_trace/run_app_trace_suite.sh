@@ -2,6 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Default to repo-local binary produced by `./dev build short`.
+export COCKROACH_BIN="${COCKROACH_BIN:-${REPO_ROOT}/cockroach}"
+
 START_CLUSTER="${START_CLUSTER:-true}"
 STOP_CLUSTER="${STOP_CLUSTER:-true}"
 
@@ -11,7 +16,7 @@ fi
 
 export COCKROACH_HOST="${COCKROACH_HOST:-127.0.0.1:26257}"
 
-# traces are created under current working directory by default.
+# Traces are created under current working directory by default.
 "${SCRIPT_DIR}/run_app_trace_case.sh" init-success
 "${SCRIPT_DIR}/run_app_trace_case.sh" init-already-initialized
 DECOMMISSION_NODES="5" "${SCRIPT_DIR}/run_app_trace_case.sh" decommission-single
