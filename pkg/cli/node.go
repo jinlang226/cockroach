@@ -372,9 +372,10 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	adminClient := conn.NewAdminClient()
+	traceSession := newAppTraceSession("decommission")
 	if err := runDecommissionNodeImpl(ctx, adminClient, nodeCtx.nodeDecommissionWait,
 		nodeCtx.nodeDecommissionChecks, nodeCtx.nodeDecommissionDryRun,
-		nodeIDs, localNodeID,
+		nodeIDs, localNodeID, &traceSession,
 	); err != nil {
 		cause := errors.UnwrapAll(err)
 		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
@@ -463,6 +464,7 @@ func runDecommissionNodeImpl(
 	dryRun bool,
 	nodeIDs []roachpb.NodeID,
 	localNodeID roachpb.NodeID,
+	traceSession *appTraceSession,
 ) error {
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
@@ -593,23 +595,79 @@ func runDecommissionNodeImpl(
 		}
 
 		if !anyActive && replicaCount == 0 {
+			secure := !serverCfg.Insecure
+
 			// We now drain the nodes in order to close all SQL connections.
 			// Note: iteration is not necessary here since there are no remaining leases
 			// on the decommissioning node after replica transferral.
 			for _, targetNode := range nodeIDs {
+				targetNodeInt := int(targetNode)
+				traceSession.Emit("DecommissionCommand", map[string]any{
+					"nodeId": targetNodeInt,
+					"phase":  "start_drain",
+					"secure": secure,
+					"before": map[string]any{},
+					"after": map[string]any{
+						"nodeId": targetNodeInt,
+						"phase":  "start_drain",
+						"secure": secure,
+					},
+					"nondeterministic": map[string]any{
+						"client": []string{"nodeId"},
+					},
+				})
+
+				drainSuccess := true
 				if targetNode == localNodeID {
 					// Skip the draining step for the node serving the request, if it is a target node.
 					_, _ = fmt.Fprintf(stderr,
 						"skipping drain step for node n%d; it is decommissioning and serving the request\n",
 						localNodeID,
 					)
+					drainSuccess = false
+					traceSession.Emit("DecommissionCommandReturn", map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "start_drain",
+						"success": drainSuccess,
+						"before": map[string]any{
+							"nodeId":  targetNodeInt,
+							"phase":   "start_drain",
+							"success": false,
+						},
+						"after": map[string]any{
+							"nodeId":  targetNodeInt,
+							"phase":   "start_drain",
+							"success": drainSuccess,
+						},
+						"nondeterministic": map[string]any{
+							"client": []string{"nodeId", "success"},
+						},
+					})
 					continue
 				}
 				if status, ok := statusByNodeID[targetNode]; !ok || !status.IsLive {
-					// Skip the draining step for the node serving the request, if it is a target node.
 					_, _ = fmt.Fprintf(stderr,
 						"skipping drain step for node n%d; it is not live\n", targetNode,
 					)
+					drainSuccess = false
+					traceSession.Emit("DecommissionCommandReturn", map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "start_drain",
+						"success": drainSuccess,
+						"before": map[string]any{
+							"nodeId":  targetNodeInt,
+							"phase":   "start_drain",
+							"success": false,
+						},
+						"after": map[string]any{
+							"nodeId":  targetNodeInt,
+							"phase":   "start_drain",
+							"success": drainSuccess,
+						},
+						"nondeterministic": map[string]any{
+							"client": []string{"nodeId", "success"},
+						},
+					})
 					continue
 				}
 				_, _ = fmt.Fprintf(stderr, "draining node n%d\n", targetNode)
@@ -626,18 +684,77 @@ func runDecommissionNodeImpl(
 						"drain step for node n%d failed; decommissioning anyway\n", targetNode,
 					)
 					_ = err // discard intentionally
+					drainSuccess = false
 				} else {
 					// NB: this output is matched on in the decommission/drains roachtest.
 					_, _ = fmt.Fprintf(stderr, "node n%d drained successfully\n", targetNode)
 				}
+
+				traceSession.Emit("DecommissionCommandReturn", map[string]any{
+					"nodeId":  targetNodeInt,
+					"phase":   "start_drain",
+					"success": drainSuccess,
+					"before": map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "start_drain",
+						"success": false,
+					},
+					"after": map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "start_drain",
+						"success": drainSuccess,
+					},
+					"nondeterministic": map[string]any{
+						"client": []string{"nodeId", "success"},
+					},
+				})
 			}
 
 			// Finally, mark the nodes as fully decommissioned.
+			for _, targetNode := range nodeIDs {
+				targetNodeInt := int(targetNode)
+				traceSession.Emit("DecommissionCommand", map[string]any{
+					"nodeId": targetNodeInt,
+					"phase":  "mark_decommissioned",
+					"secure": secure,
+					"before": map[string]any{},
+					"after": map[string]any{
+						"nodeId": targetNodeInt,
+						"phase":  "mark_decommissioned",
+						"secure": secure,
+					},
+					"nondeterministic": map[string]any{
+						"client": []string{"nodeId"},
+					},
+				})
+			}
 			decommissionReq := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
 			_, err = c.Decommission(ctx, decommissionReq)
+			decommissionSuccess := err == nil
+			for _, targetNode := range nodeIDs {
+				targetNodeInt := int(targetNode)
+				traceSession.Emit("DecommissionCommandReturn", map[string]any{
+					"nodeId":  targetNodeInt,
+					"phase":   "mark_decommissioned",
+					"success": decommissionSuccess,
+					"before": map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "mark_decommissioned",
+						"success": false,
+					},
+					"after": map[string]any{
+						"nodeId":  targetNodeInt,
+						"phase":   "mark_decommissioned",
+						"success": decommissionSuccess,
+					},
+					"nondeterministic": map[string]any{
+						"client": []string{"nodeId", "success"},
+					},
+				})
+			}
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
