@@ -24,6 +24,13 @@ if [[ ! -x "${COCKROACH_BIN}" ]]; then
   exit 1
 fi
 
+CLUSTER_DIR="${APP_TRACE_CLUSTER_DIR:-$(pwd)/_app_trace_cluster}"
+CLUSTER_ENV="${CLUSTER_DIR}/cluster.env"
+if [[ -z "${COCKROACH_HOST:-}" && -f "${CLUSTER_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${CLUSTER_ENV}"
+fi
+
 COCKROACH_HOST="${COCKROACH_HOST:-127.0.0.1:26257}"
 COCKROACH_INSECURE="${COCKROACH_INSECURE:-true}"
 TRACE_DIR="${TRACE_DIR:-$(pwd)/traces}"

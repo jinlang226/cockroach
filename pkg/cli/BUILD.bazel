@@ -19,6 +19,7 @@ go_library(
     srcs = [
         "auth.go",
         "auto_decrypt_fs.go",
+        "app_trace_logger.go",
         "cert.go",
         "cli.go",
         "client_url.go",

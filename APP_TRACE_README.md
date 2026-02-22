@@ -28,7 +28,7 @@ If the model adds new app events or fields, extend logging accordingly.
 
 ## 1) Build Cockroach from your local source (required)
 
-Use your modified local source. Do **not** use the public prebuilt Cockroach binary for trace-conformance work, because your trace logging lives in your local code changes.
+Use your modified local source. Do **not** use a public prebuilt Cockroach binary for trace-conformance work, because your trace logging lives in your local code changes.
 
 ### 1.1 Install common build dependencies
 
@@ -46,7 +46,7 @@ From repo root:
 ```bash
 cd /path/to/cockroach
 
-# Optional but recommended: checks local toolchain prerequisites.
+# Optional but recommended.
 ./dev doctor || true
 
 # Build local binary from your source branch.
@@ -71,9 +71,11 @@ scripts/app_trace/start_local_cluster.sh
 
 Default behavior:
 
-- starts 5 local nodes on `127.0.0.1:26257..26261`
-- uses local data dir `./_app_trace_cluster`
-- runs `cockroach init` once
+- auto-stops previous app-trace cluster under the same cluster dir,
+- starts 5 local nodes,
+- if requested ports are busy, auto-selects the next free port block,
+- runs `cockroach init` once,
+- writes selected host/ports to `./_app_trace_cluster/cluster.env`.
 
 Stop cluster:
 
@@ -108,6 +110,8 @@ DECOMMISSION_NODES="5" scripts/app_trace/run_app_trace_case.sh decommission-sing
 ```bash
 DECOMMISSION_NODES="4" scripts/app_trace/run_app_trace_case.sh decommission-custom
 ```
+
+`run_app_trace_case.sh` auto-loads host/port from `cluster.env` when available.
 
 ---
 
@@ -171,17 +175,21 @@ From `autokctrl/cockroach` (use absolute trace path):
 ## 7) Common environment variables
 
 - `COCKROACH_BIN`: Cockroach executable path (default: repo-local `./cockroach`)
-- `COCKROACH_HOST`: CLI target host (default: `127.0.0.1:26257`)
+- `COCKROACH_HOST`: CLI target host (default: auto from `cluster.env`, else `127.0.0.1:26257`)
 - `COCKROACH_INSECURE`: default `true`
 - `TRACE_DIR`: output directory for traces (default: `$(pwd)/traces`)
 
-Local cluster script vars:
+Cluster/startup variables:
 
 - `APP_TRACE_CLUSTER_DIR`: default `$(pwd)/_app_trace_cluster`
 - `APP_TRACE_NODE_COUNT`: default `5`
 - `APP_TRACE_BASE_SQL_PORT`: default `26257`
 - `APP_TRACE_BASE_HTTP_PORT`: default `8081`
 - `RESET_CLUSTER_DIR`: default `true`
+- `AUTO_STOP_EXISTING`: default `true`
+- `APP_TRACE_FORCE_PORTS`: default `false` (if `true`, fail instead of scanning)
+- `APP_TRACE_PORT_SCAN_STEP`: default `50`
+- `APP_TRACE_PORT_SCAN_TRIES`: default `20`
 
 ---
 
@@ -191,13 +199,18 @@ Local cluster script vars:
    - run from repo root: `./dev build short`
    - verify: `./cockroach version`
 
-2. Port conflict
-   - stop existing Cockroach processes, or change `APP_TRACE_BASE_SQL_PORT`
+2. Port conflict on start
+   - by default script auto-picks another port block
+   - check selected host in `./_app_trace_cluster/cluster.env`
 
-3. Trace file not generated
+3. Restart issues / stale processes
+   - by default `start_local_cluster.sh` auto-stops old cluster in the same dir
+   - manual stop: `scripts/app_trace/stop_local_cluster.sh`
+
+4. Trace file not generated
    - check script output for command failure
    - check write permission for current `traces/`
 
-4. Decommission case fails
-   - verify 5-node cluster is up first
-   - run: `./cockroach node status --insecure --host=127.0.0.1:26257`
+5. Decommission case fails
+   - verify nodes are up first:
+     `./cockroach node status --insecure --host="${COCKROACH_HOST:-127.0.0.1:26257}"`

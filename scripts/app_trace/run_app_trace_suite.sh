@@ -9,9 +9,16 @@ export COCKROACH_BIN="${COCKROACH_BIN:-${REPO_ROOT}/cockroach}"
 
 START_CLUSTER="${START_CLUSTER:-true}"
 STOP_CLUSTER="${STOP_CLUSTER:-true}"
+CLUSTER_DIR="${APP_TRACE_CLUSTER_DIR:-$(pwd)/_app_trace_cluster}"
+CLUSTER_ENV="${CLUSTER_DIR}/cluster.env"
 
 if [[ "${START_CLUSTER}" == "true" ]]; then
   "${SCRIPT_DIR}/start_local_cluster.sh"
+fi
+
+if [[ -f "${CLUSTER_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${CLUSTER_ENV}"
 fi
 
 export COCKROACH_HOST="${COCKROACH_HOST:-127.0.0.1:26257}"
