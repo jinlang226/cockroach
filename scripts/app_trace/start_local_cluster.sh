@@ -22,6 +22,7 @@ BASE_HTTP_PORT="${APP_TRACE_BASE_HTTP_PORT:-8081}"
 RESET_CLUSTER_DIR="${RESET_CLUSTER_DIR:-true}"
 AUTO_STOP_EXISTING="${AUTO_STOP_EXISTING:-true}"
 APP_TRACE_FORCE_PORTS="${APP_TRACE_FORCE_PORTS:-false}"
+SKIP_INIT="${SKIP_INIT:-false}"
 PORT_SCAN_STEP="${APP_TRACE_PORT_SCAN_STEP:-50}"
 PORT_SCAN_TRIES="${APP_TRACE_PORT_SCAN_TRIES:-20}"
 
@@ -138,13 +139,17 @@ done
 
 sleep 3
 
-set +e
-"${COCKROACH_BIN}" init --insecure --host="127.0.0.1:${BASE_SQL_PORT}"
-init_rc=$?
-set -e
+if [[ "${SKIP_INIT}" == "true" ]]; then
+  echo "Skipping cluster init (SKIP_INIT=true); caller must run 'cockroach init' explicitly."
+else
+  set +e
+  "${COCKROACH_BIN}" init --insecure --host="127.0.0.1:${BASE_SQL_PORT}"
+  init_rc=$?
+  set -e
 
-if [[ ${init_rc} -ne 0 ]]; then
-  echo "init returned non-zero (cluster may already be initialized); continuing"
+  if [[ ${init_rc} -ne 0 ]]; then
+    echo "init returned non-zero (cluster may already be initialized); continuing"
+  fi
 fi
 
 CLUSTER_ENV="${CLUSTER_DIR}/cluster.env"
